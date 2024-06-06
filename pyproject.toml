@@ -1,0 +1,22 @@
+[project]
+name = "mlxformers"
+version = "0.1.0"
+description = "This is a MLX implementation of the transformers library from Hugging Face. This should contain all or a subset of the models from the transformers libraary until it gets added to the original library."
+authors = [
+    {name = "Eduardo Pacheco", email = "pacheco.eduardo.silva@gmail.com"},
+]
+dependencies = [
+    "transformers>=4.41.2",
+    "mlx>=0.14.1",
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+distribution = true
