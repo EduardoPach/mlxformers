@@ -6,7 +6,6 @@ authors = [
     {name = "Eduardo Pacheco", email = "pacheco.eduardo.silva@gmail.com"},
 ]
 dependencies = [
-    "transformers>=4.41.2",
     "mlx>=0.14.1",
 ]
 requires-python = ">=3.8"
@@ -20,3 +19,8 @@ build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "transformers>=4.42.4",
+]
