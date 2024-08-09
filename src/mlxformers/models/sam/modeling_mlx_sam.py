@@ -34,7 +34,7 @@ _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 
 @dataclass
-class SamVisionEncoderOutput(ModelOutput):
+class MlxSamVisionEncoderOutput(ModelOutput):
     """
     Base class for sam vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
@@ -64,7 +64,7 @@ class SamVisionEncoderOutput(ModelOutput):
 
 
 @dataclass
-class SamImageSegmentationOutput(ModelOutput):
+class MlxSamImageSegmentationOutput(ModelOutput):
     """
     Base class for Segment-Anything model's output
 
@@ -99,7 +99,7 @@ class SamImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions: Optional[Tuple[mx.array, ...]] = None
 
 
-class SamPatchEmbeddings(nn.Module):
+class MlxSamPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -137,7 +137,7 @@ class SamPatchEmbeddings(nn.Module):
         return embeddings
 
 
-class SamMLPBlock(nn.Module):
+class MlxSamMLPBlock(nn.Module):
     def __init__(self, config: SamVisionConfig | SamMaskDecoderConfig) -> None:
         super().__init__()
         self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
@@ -153,7 +153,7 @@ class SamMLPBlock(nn.Module):
 
 # NOTE: Copy from statements are not actually used here
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->Sam
-class SamLayerNorm(nn.Module):
+class MlxSamLayerNorm(nn.Module):
     r"""LayerNorm that supports only channel last format i.e. `(batch_size, height, width, channels)`."""
 
     def __init__(self, normalized_shape: int, eps: float = 1e-6) -> None:
@@ -174,7 +174,7 @@ class SamLayerNorm(nn.Module):
         return x
 
 
-class SamAttention(nn.Module):
+class MlxSamAttention(nn.Module):
     """
     SAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
     values.
@@ -221,7 +221,7 @@ class SamAttention(nn.Module):
         key = self._separate_heads(key, self.num_attention_heads)
         value = self._separate_heads(value, self.num_attention_heads)
 
-        # SamAttention
+        # MlxSamAttention
         _, _, _, c_per_head = query.shape
         attn = query @ key.transpose(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
@@ -239,7 +239,7 @@ class SamAttention(nn.Module):
         return out
 
 
-class SamTwoWayAttentionBlock(nn.Module):
+class MlxSamTwoWayAttentionBlock(nn.Module):
     def __init__(
         self, config: SamMaskDecoderConfig, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False
     ):
@@ -261,17 +261,17 @@ class SamTwoWayAttentionBlock(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_norm_eps = config.layer_norm_eps
 
-        self.self_attn = SamAttention(config, downsample_rate=1)
+        self.self_attn = MlxSamAttention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.cross_attn_token_to_image = SamAttention(config, downsample_rate=attention_downsample_rate)
+        self.cross_attn_token_to_image = MlxSamAttention(config, downsample_rate=attention_downsample_rate)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.mlp = SamMLPBlock(config)
+        self.mlp = MlxSamMLPBlock(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = SamAttention(config, downsample_rate=attention_downsample_rate)
+        self.cross_attn_image_to_token = MlxSamAttention(config, downsample_rate=attention_downsample_rate)
 
         self.skip_first_layer_pe = skip_first_layer_pe
 
@@ -328,7 +328,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         return outputs
 
 
-class SamTwoWayTransformer(nn.Module):
+class MlxSamTwoWayTransformer(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
         self.config = config
@@ -337,9 +337,9 @@ class SamTwoWayTransformer(nn.Module):
         self.layers = []
 
         for i in range(self.num_hidden_layers):
-            self.layers.append(SamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
+            self.layers.append(MlxSamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
 
-        self.final_attn_token_to_image = SamAttention(config)
+        self.final_attn_token_to_image = MlxSamAttention(config)
         self.layer_norm_final_attn = nn.LayerNorm(config.hidden_size)
 
     def __call__(
@@ -400,7 +400,7 @@ class SamTwoWayTransformer(nn.Module):
         return queries, keys, all_attentions
 
 
-class SamFeedForward(nn.Module):
+class MlxSamFeedForward(nn.Module):
     def __init__(
         self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, sigmoid_output: bool = False
     ):
@@ -425,7 +425,7 @@ class SamFeedForward(nn.Module):
 
 
 # TODO: Naive implem. Replace when mlx.nn support conv_transpose
-class SamConvTranspose2d(nn.Module):
+class MlxSamConvTranspose2d(nn.Module):
     def __init__(
         self,
         in_channels: int,
@@ -475,7 +475,7 @@ class SamConvTranspose2d(nn.Module):
         return y
 
 
-class SamMaskDecoder(nn.Module):
+class MlxSamMaskDecoder(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
 
@@ -487,20 +487,22 @@ class SamMaskDecoder(nn.Module):
         self.iou_token = nn.Embedding(1, self.hidden_size)
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, self.hidden_size)
 
-        self.transformer = SamTwoWayTransformer(config)
+        self.transformer = MlxSamTwoWayTransformer(config)
 
         # should we create a new class for this?
-        self.upscale_conv1 = SamConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
-        self.upscale_conv2 = SamConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.upscale_layer_norm = SamLayerNorm(self.hidden_size // 4)
+        self.upscale_conv1 = MlxSamConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
+        self.upscale_conv2 = MlxSamConvTranspose2d(
+            self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2
+        )
+        self.upscale_layer_norm = MlxSamLayerNorm(self.hidden_size // 4)
         self.activation = nn.GELU()
 
         self.output_hypernetworks_mlps = [
-            SamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
+            MlxSamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
             for _ in range(self.num_mask_tokens)
         ]
 
-        self.iou_prediction_head = SamFeedForward(
+        self.iou_prediction_head = MlxSamFeedForward(
             self.hidden_size, config.iou_head_hidden_dim, self.num_mask_tokens, config.iou_head_depth
         )
 
@@ -613,7 +615,7 @@ class SamMaskDecoder(nn.Module):
         return outputs
 
 
-class SamPositionalEmbedding(nn.Module):
+class MlxSamPositionalEmbedding(nn.Module):
     def __init__(self, config: SamVisionConfig):
         super().__init__()
         self.scale = config.hidden_size // 2
@@ -639,7 +641,7 @@ class SamPositionalEmbedding(nn.Module):
         return mx.concatenate([mx.sin(coordinates), mx.cos(coordinates)], axis=-1)
 
 
-class SamMaskEmbedding(nn.Module):
+class MlxSamMaskEmbedding(nn.Module):
     def __init__(self, config: SamPromptEncoderConfig):
         super().__init__()
         self.mask_input_channels = config.mask_input_channels // 4
@@ -647,8 +649,8 @@ class SamMaskEmbedding(nn.Module):
         self.conv1 = nn.Conv2d(1, self.mask_input_channels, kernel_size=2, stride=2)
         self.conv2 = nn.Conv2d(self.mask_input_channels, config.mask_input_channels, kernel_size=2, stride=2)
         self.conv3 = nn.Conv2d(config.mask_input_channels, config.hidden_size, kernel_size=1)
-        self.layer_norm1 = SamLayerNorm(self.mask_input_channels, eps=config.layer_norm_eps)
-        self.layer_norm2 = SamLayerNorm(self.mask_input_channels * 4, eps=config.layer_norm_eps)
+        self.layer_norm1 = MlxSamLayerNorm(self.mask_input_channels, eps=config.layer_norm_eps)
+        self.layer_norm2 = MlxSamLayerNorm(self.mask_input_channels * 4, eps=config.layer_norm_eps)
 
     def __call__(self, masks: mx.array):
         # Move channels to last dimension as convs expect it there
@@ -668,11 +670,11 @@ class SamMaskEmbedding(nn.Module):
         return dense_embeddings
 
 
-class SamPromptEncoder(nn.Module):
+class MlxSamPromptEncoder(nn.Module):
     def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding: nn.Module):
         super().__init__()
         self.shared_embedding = shared_patch_embedding
-        self.mask_embed = SamMaskEmbedding(config)
+        self.mask_embed = MlxSamMaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
@@ -778,7 +780,7 @@ class SamPromptEncoder(nn.Module):
         return sparse_embeddings, dense_embeddings
 
 
-class SamVisionAttention(nn.Module):
+class MlxSamVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(self, config: SamVisionConfig, window_size: int):
@@ -932,13 +934,13 @@ class SamVisionAttention(nn.Module):
         return outputs
 
 
-class SamVisionLayer(nn.Module):
+class MlxSamVisionLayer(nn.Module):
     def __init__(self, config: SamVisionConfig, window_size: int):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = SamVisionAttention(config, window_size)
+        self.attn = MlxSamVisionAttention(config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = SamMLPBlock(config)
+        self.mlp = MlxSamMLPBlock(config)
         self.window_size = window_size
 
     def window_partition(self, hidden_states: mx.array, window_size: int) -> Tuple[mx.array, Tuple[int, int]]:
@@ -1027,15 +1029,15 @@ class SamVisionLayer(nn.Module):
         return outputs
 
 
-class SamVisionNeck(nn.Module):
+class MlxSamVisionNeck(nn.Module):
     def __init__(self, config: SamVisionConfig):
         super().__init__()
         self.config = config
 
         self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
-        self.layer_norm1 = SamLayerNorm(config.output_channels)
+        self.layer_norm1 = MlxSamLayerNorm(config.output_channels)
         self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
-        self.layer_norm2 = SamLayerNorm(config.output_channels)
+        self.layer_norm2 = MlxSamLayerNorm(config.output_channels)
 
     def __call__(self, hidden_states: mx.array) -> mx.array:
         hidden_states = self.conv1(hidden_states)
@@ -1046,13 +1048,13 @@ class SamVisionNeck(nn.Module):
         return hidden_states
 
 
-class SamVisionEncoder(nn.Module):
+class MlxSamVisionEncoder(nn.Module):
     def __init__(self, config: SamVisionConfig):
         super().__init__()
         self.config = config
         self.image_size = config.image_size
 
-        self.patch_embed = SamPatchEmbeddings(config)
+        self.patch_embed = MlxSamPatchEmbeddings(config)
 
         self.pos_embed = None
         if config.use_abs_pos:
@@ -1068,13 +1070,13 @@ class SamVisionEncoder(nn.Module):
 
         self.layers = []
         for i in range(config.num_hidden_layers):
-            layer = SamVisionLayer(
+            layer = MlxSamVisionLayer(
                 config,
                 window_size=config.window_size if i not in config.global_attn_indexes else 0,
             )
             self.layers.append(layer)
 
-        self.neck = SamVisionNeck(config)
+        self.neck = MlxSamVisionNeck(config)
 
         self.gradient_checkpointing = False
 
@@ -1087,7 +1089,7 @@ class SamVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SamVisionEncoderOutput]:
+    ) -> Union[Tuple, MlxSamVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1135,14 +1137,14 @@ class SamVisionEncoder(nn.Module):
                 outputs = outputs + (all_self_attentions,)
             return outputs
 
-        return SamVisionEncoderOutput(
+        return MlxSamVisionEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
 
 
-class SamPreTrainedModel(MlxPreTrainedModel):
+class MlxSamPreTrainedModel(MlxPreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
@@ -1251,16 +1253,16 @@ SAM_INPUTS_DOCSTRING = r"""
     " optional 2D location and bounding boxes.",
     SAM_START_DOCSTRING,
 )
-class SamModel(SamPreTrainedModel):
+class MlxSamModel(MlxSamPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.shared_image_embedding = SamPositionalEmbedding(config.vision_config)
+        self.shared_image_embedding = MlxSamPositionalEmbedding(config.vision_config)
 
-        self.vision_encoder = SamVisionEncoder(config.vision_config)
-        self.prompt_encoder = SamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
-        self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
+        self.vision_encoder = MlxSamVisionEncoder(config.vision_config)
+        self.prompt_encoder = MlxSamPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
+        self.mask_decoder = MlxSamMaskDecoder(config.mask_decoder_config)
 
         self.post_init()
 
@@ -1476,7 +1478,7 @@ class SamModel(SamPreTrainedModel):
                 output = output + (vision_attentions, mask_decoder_attentions)
             return output
 
-        return SamImageSegmentationOutput(
+        return MlxSamImageSegmentationOutput(
             iou_scores=iou_predictions,
             pred_masks=low_res_masks,
             vision_hidden_states=vision_hidden_states,
