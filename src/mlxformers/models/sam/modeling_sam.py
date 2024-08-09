@@ -163,7 +163,7 @@ class SamLayerNorm(nn.Module):
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape: int, eps: float=1e-6):
+    def __init__(self, normalized_shape: int, eps: float = 1e-6):
         super().__init__()
         self.weight = mx.ones(normalized_shape)
         self.bias = mx.zeros(normalized_shape)
@@ -187,7 +187,7 @@ class SamAttention(nn.Module):
     values.
     """
 
-    def __init__(self, config: SamMaskDecoderConfig, downsample_rate: Optional[int]=None):
+    def __init__(self, config: SamMaskDecoderConfig, downsample_rate: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -214,7 +214,9 @@ class SamAttention(nn.Module):
         hidden_states = hidden_states.swapaxes(1, 2)
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: mx.array, key: mx.array, value: mx.array, attention_similarity: mx.array = None) -> mx.array:
+    def forward(
+        self, query: mx.array, key: mx.array, value: mx.array, attention_similarity: mx.array = None
+    ) -> mx.array:
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -245,7 +247,9 @@ class SamAttention(nn.Module):
 
 
 class SamTwoWayAttentionBlock(nn.Module):
-    def __init__(self, config: SamMaskDecoderConfig, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False):
+    def __init__(
+        self, config: SamMaskDecoderConfig, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False
+    ):
         """
         A transformer block with four layers:
             (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
@@ -426,6 +430,7 @@ class SamFeedForward(nn.Module):
             hidden_states = nn.sigmoid(hidden_states)
         return hidden_states
 
+
 # TODO: Naive implem. Replace when mlx.nn support conv_transpose
 class SamConvTranspose2d(nn.Module):
     def __init__(
@@ -479,6 +484,7 @@ class SamConvTranspose2d(nn.Module):
             y = y + self.bias
         return y
 
+
 class SamMaskDecoder(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
@@ -500,7 +506,8 @@ class SamMaskDecoder(nn.Module):
         self.activation = nn.GELU()
 
         self.output_hypernetworks_mlps = [
-            SamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3) for _ in range(self.num_mask_tokens)
+            SamFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
+            for _ in range(self.num_mask_tokens)
             for _ in range(self.num_mask_tokens)
         ]
 
