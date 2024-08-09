@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import mlx.core as mx
 import numpy as np
 from mlx import nn
-from mlxformers.modeling_mlx_utils import ACT2FN, MlxPreTrainedModel
+from mlxformers.modeling_mlx_utils import ACT2FN, ConvTranspose2d, MlxPreTrainedModel
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 
@@ -424,57 +424,6 @@ class MlxSamFeedForward(nn.Module):
         return hidden_states
 
 
-# TODO: Naive implem. Replace when mlx.nn support conv_transpose
-class MlxSamConvTranspose2d(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: Union[int, tuple],
-        stride: Union[int, tuple] = 1,
-        padding: Union[int, tuple] = 0,
-        dilation: Union[int, tuple] = 1,
-        bias: bool = True,
-    ):
-        super().__init__()
-
-        kernel_size, stride, padding = [(x, x) if isinstance(x, int) else x for x in (kernel_size, stride, padding)]
-        scale = math.sqrt(1 / (in_channels * kernel_size[0] * kernel_size[1]))
-        self.weight = mx.random.uniform(
-            low=-scale,
-            high=scale,
-            shape=(out_channels, *kernel_size, in_channels),
-        )
-        if bias:
-            self.bias = mx.zeros((out_channels,))
-
-        self.padding = padding
-        self.stride = stride
-        self.dilation = dilation
-
-    def _extra_repr(self):
-        return (
-            f"{self.weight.shape[-1]}, {self.weight.shape[0]}, "
-            f"kernel_size={self.weight.shape[1:2]}, stride={self.stride}, "
-            f"padding={self.padding}, dilation={self.dilation}, "
-            f"bias={'bias' in self}"
-        )
-
-    def __call__(self, x):
-        y = mx.conv_general(
-            x,
-            self.weight,
-            stride=1,
-            padding=self.padding,
-            kernel_dilation=self.dilation,
-            input_dilation=self.stride,
-            flip=True,
-        )
-        if "bias" in self:
-            y = y + self.bias
-        return y
-
-
 class MlxSamMaskDecoder(nn.Module):
     def __init__(self, config: SamMaskDecoderConfig):
         super().__init__()
@@ -490,10 +439,8 @@ class MlxSamMaskDecoder(nn.Module):
         self.transformer = MlxSamTwoWayTransformer(config)
 
         # should we create a new class for this?
-        self.upscale_conv1 = MlxSamConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
-        self.upscale_conv2 = MlxSamConvTranspose2d(
-            self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2
-        )
+        self.upscale_conv1 = ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
+        self.upscale_conv2 = ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2)
         self.upscale_layer_norm = MlxSamLayerNorm(self.hidden_size // 4)
         self.activation = nn.GELU()
 
@@ -588,7 +535,7 @@ class MlxSamMaskDecoder(nn.Module):
         for i in range(self.num_mask_tokens):
             current_mlp = self.output_hypernetworks_mlps[i]
             hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
-        hyper_in = mx.stack(hyper_in_list, dim=2)
+        hyper_in = mx.stack(hyper_in_list, axis=2)
 
         _, num_channels, height, width = upscaled_embedding.shape
         upscaled_embedding = upscaled_embedding.reshape(batch_size, point_batch_size, num_channels, height * width)
@@ -705,7 +652,7 @@ class MlxSamPromptEncoder(nn.Module):
         point_embedding = mx.where(
             labels[..., None] != -10,
             point_embedding,
-            mx.array(0.0, dtype=point_embedding.dtype, device=point_embedding.device),
+            mx.array(0.0, dtype=point_embedding.dtype),
         )
 
         point_embedding = mx.where(
@@ -770,7 +717,7 @@ class MlxSamPromptEncoder(nn.Module):
             dense_embeddings = self.mask_embed(input_masks)
         else:
             dense_embeddings = mx.broadcast_to(
-                self.no_mask_embed.weight,
+                self.no_mask_embed.weight[:, :, None, None],
                 shape=(batch_size, self.hidden_size, self.image_embedding_size[0], self.image_embedding_size[1]),
             )
 
@@ -908,9 +855,10 @@ class MlxSamVisionAttention(nn.Module):
             .transpose(2, 0, 3, 1, 4)
         )
         # q, k, v with shape (batch_size * nHead, height * width, channel)
-        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
+        qkv = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1)
+        query, key, value = qkv[0], qkv[1], qkv[2]
 
-        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
+        attn_weights = (query * self.scale) @ key.moveaxis(-2, -1)
 
         if self.use_rel_pos:
             attn_weights = self.add_decomposed_rel_pos(
@@ -1045,7 +993,7 @@ class MlxSamVisionNeck(nn.Module):
 
         hidden_states = self.conv2(hidden_states)
         hidden_states = self.layer_norm2(hidden_states)
-        return hidden_states
+        return hidden_states.moveaxis(-1, 1)
 
 
 class MlxSamVisionEncoder(nn.Module):
@@ -1152,7 +1100,7 @@ class MlxSamPreTrainedModel(MlxPreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1271,15 +1219,15 @@ class MlxSamModel(MlxSamPreTrainedModel):
 
     def get_image_wide_positional_embeddings(self):
         size = self.config.prompt_encoder_config.image_embedding_size
-        target_dtype = self.shared_image_embedding.positional_embedding.dtype
+        target_dtype = self.shared_image_embedding._positional_embedding.dtype
         grid = mx.ones((size, size), dtype=target_dtype)
-        y_embed = grid.cumsum(dim=0) - 0.5
-        x_embed = grid.cumsum(dim=1) - 0.5
+        y_embed = grid.cumsum(axis=0) - 0.5
+        x_embed = grid.cumsum(axis=1) - 0.5
         y_embed = y_embed / size
         x_embed = x_embed / size
 
         positional_embedding = self.shared_image_embedding(mx.stack([x_embed, y_embed], axis=-1))
-        return positional_embedding.transpose(2, 0, 1).unsqueeze(0)  # channel x height x width
+        return positional_embedding.transpose(2, 0, 1)[None]  # channel x height x width
 
     def get_image_embeddings(
         self,
@@ -1420,7 +1368,7 @@ class MlxSamModel(MlxSamPreTrainedModel):
         image_positional_embeddings = self.get_image_wide_positional_embeddings()
         # repeat with batch size
         batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings.shape[0]
-        image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
+        image_positional_embeddings = mx.repeat(image_positional_embeddings, repeats=batch_size, axis=0)
 
         vision_attentions = None
         vision_hidden_states = None

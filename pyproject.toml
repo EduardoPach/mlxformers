@@ -9,6 +9,7 @@ dependencies = [
     "mlx>=0.14.1",
     "huggingface-hub>=0.24.5",
     "transformers>=4.44.0",
+    "pillow>=10.4.0",
 ]
 requires-python = ">=3.8"
 readme = "README.md"

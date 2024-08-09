@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -48,6 +49,57 @@ def is_file(*paths: str) -> bool:
     Joins in order all the paths provided and checks if the resulting path is a file.
     """
     return os.path.isfile(os.path.join(*paths))
+
+
+# While MLX does not support ConvTranspose2d, we can use the following implementation
+class ConvTranspose2d(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, tuple],
+        stride: Union[int, tuple] = 1,
+        padding: Union[int, tuple] = 0,
+        dilation: Union[int, tuple] = 1,
+        bias: bool = True,
+    ):
+        super().__init__()
+
+        kernel_size, stride, padding = [(x, x) if isinstance(x, int) else x for x in (kernel_size, stride, padding)]
+        scale = math.sqrt(1 / (in_channels * kernel_size[0] * kernel_size[1]))
+        self.weight = mx.random.uniform(
+            low=-scale,
+            high=scale,
+            shape=(out_channels, *kernel_size, in_channels),
+        )
+        if bias:
+            self.bias = mx.zeros((out_channels,))
+
+        self.padding = padding
+        self.stride = stride
+        self.dilation = dilation
+
+    def _extra_repr(self):
+        return (
+            f"{self.weight.shape[-1]}, {self.weight.shape[0]}, "
+            f"kernel_size={self.weight.shape[1:2]}, stride={self.stride}, "
+            f"padding={self.padding}, dilation={self.dilation}, "
+            f"bias={'bias' in self}"
+        )
+
+    def __call__(self, x):
+        y = mx.conv_general(
+            x,
+            self.weight,
+            stride=1,
+            padding=self.padding,
+            kernel_dilation=self.dilation,
+            input_dilation=self.stride,
+            flip=True,
+        )
+        if "bias" in self:
+            y = y + self.bias
+        return y
 
 
 def local_case(base_path: str, from_pt: bool) -> Tuple[str, bool]:
@@ -500,6 +552,20 @@ class MlxPreTrainedModel(nn.Module, PushToHubMixin):
         weights = tree_unflatten(list(weights_dict.items()))
         # TODO: Missing warning about non-initialized weights
         model.update(weights)
+
+        if (filename == SAFE_WEIGHTS_INDEX_NAME) or (filename == SAFE_WEIGHTS_NAME) or from_pt:
+            logger.info(
+                "The checkpoint weights were saved using something other than `MLX`."
+                "Convolution layers weights will be reshaped to `channel_last` to match the `MLX` format."
+            )
+            for name, module in model.named_modules():
+                if isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d)):
+                    logger.debug(f"Reshaping convolution layer {name} to `channel_last`.")
+                    # Modification only applied to weight not bias
+                    module.apply(lambda param: param.moveaxis(1, -1) if param.ndim > 1 else param)
+                if isinstance(module, ConvTranspose2d):
+                    logger.debug(f"Reshaping transpose convolution layer {name} to `channel_last`.")
+                    module.apply(lambda param: param.moveaxis(0, -1) if param.ndim > 1 else param)
 
         return model
 
