@@ -1,46 +1,45 @@
-import os
 import json
-from functools import partial
-from typing import Optional, Union, Tuple, Dict, Any, List
+import os
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from mlx import nn
 import mlx.core as mx
-from mlx.utils import tree_flatten
+from mlx import nn
+from mlx.utils import tree_flatten, tree_unflatten
 from transformers import PretrainedConfig
+from transformers.dynamic_module_utils import custom_object_save
 from transformers.utils import (
-    logging,
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME,
+    WEIGHTS_NAME,
     PushToHubMixin,
     cached_file,
-    has_file,
-    download_url,
-    is_remote_url,
     copy_func,
-    SAFE_WEIGHTS_NAME,
-    SAFE_WEIGHTS_INDEX_NAME,
-    WEIGHTS_NAME,
-    WEIGHTS_INDEX_NAME,
+    download_url,
+    has_file,
+    is_remote_url,
+    logging,
 )
-from transformers.utils.hub import get_checkpoint_shard_files, convert_file_size_to_int
-from transformers.dynamic_module_utils import custom_object_save
+from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
+
 
 MLX_WEIGHTS_NAME = "mlx_model.safetensors"
 MLX_WEIGHTS_INDEX_NAME = "mlx_model.safetensors.index.json"
 
-
 logger = logging.get_logger(__name__)
 
 ACT2FN = {
-    "gelu": partial(nn.GELU, approx="none"),
-    "relu": nn.ReLU,
-    "relu6": nn.ReLU6,
-    "mish": nn.Mish,
-    "leaky_relu": nn.LeakyReLU,
-    "silu": nn.SiLU,
-    "swish": nn.SiLU,
-    "sigmoid": nn.Sigmoid,
-    "quick_gelu": partial(nn.GELU, approx="fast"),
-    "gelu_accurate": partial(nn.GELU, approx="precise"),
-    "tanh": nn.Tanh,
+    "gelu": nn.gelu,
+    "relu": nn.relu,
+    "relu6": nn.relu6,
+    "mish": nn.mish,
+    "leaky_relu": nn.leaky_relu,
+    "silu": nn.silu,
+    "swish": nn.silu,
+    "sigmoid": nn.sigmoid,
+    "quick_gelu": nn.gelu_fast_approx,
+    "gelu_accurate": nn.gelu_approx,
+    "tanh": nn.tanh,
 }
 
 
@@ -494,10 +493,11 @@ class MlxPreTrainedModel(nn.Module, PushToHubMixin):
         if from_pt:
             raise NotImplementedError("Support for pytorch checkpoints is coming soon!")
         elif is_sharded:
-            weights = cls.load_sharded_weights(resolved_archive_file)
+            weights_dict = cls.load_sharded_weights(resolved_archive_file)
         else:
-            weights = mx.load(resolved_archive_file)
+            weights_dict = mx.load(resolved_archive_file)
 
+        weights = tree_unflatten(list(weights_dict.items()))
         # TODO: Missing warning about non-initialized weights
         model.update(weights)
 
