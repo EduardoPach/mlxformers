@@ -1163,7 +1163,7 @@ class MlxSamPreTrainedModel(MlxPreTrainedModel):
 
 
 SAM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    This model inherits from [`MlxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
@@ -1174,7 +1174,7 @@ SAM_START_DOCSTRING = r"""
     Parameters:
         config ([`SamConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~MlxPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
