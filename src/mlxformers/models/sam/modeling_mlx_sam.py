@@ -567,7 +567,7 @@ class MlxSamPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.hidden_size // 2
         # This is same as register_buffer, gotta add the '_' to not be consider a parameter
-        self._positional_embedding = self.scale * mx.random.uniform(shape=(2, config.num_pos_feats))
+        self.positional_embedding = self.scale * mx.random.uniform(shape=(2, config.num_pos_feats))
 
     def __call__(self, input_coords: mx.array, input_shape: Optional[Tuple[int, int]] = None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -581,8 +581,8 @@ class MlxSamPositionalEmbedding(nn.Module):
 
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
-        coordinates = coordinates.astype(self._positional_embedding.dtype)
-        coordinates = coordinates @ self._positional_embedding
+        coordinates = coordinates.astype(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
         coordinates = 2 * np.pi * coordinates
         # outputs d_1 x ... x d_n x channel shape
         return mx.concatenate([mx.sin(coordinates), mx.cos(coordinates)], axis=-1)
@@ -644,16 +644,7 @@ class MlxSamPromptEncoder(nn.Module):
         input_shape = (self.input_image_size, self.input_image_size)
         point_embedding = self.shared_embedding(points, input_shape)
 
-        # torch.where and expanding the labels tensor is required by the ONNX export
         point_embedding = mx.where(labels[..., None] == -1, self.not_a_point_embed.weight, point_embedding)
-
-        # This is required for the ONNX export. The dtype, device need to be explicitely
-        # specificed as otherwise torch.onnx.export interprets as double
-        point_embedding = mx.where(
-            labels[..., None] != -10,
-            point_embedding,
-            mx.array(0.0, dtype=point_embedding.dtype),
-        )
 
         point_embedding = mx.where(
             (labels == 0)[:, :, :, None],
@@ -1219,7 +1210,7 @@ class MlxSamModel(MlxSamPreTrainedModel):
 
     def get_image_wide_positional_embeddings(self):
         size = self.config.prompt_encoder_config.image_embedding_size
-        target_dtype = self.shared_image_embedding._positional_embedding.dtype
+        target_dtype = self.shared_image_embedding.positional_embedding.dtype
         grid = mx.ones((size, size), dtype=target_dtype)
         y_embed = grid.cumsum(axis=0) - 0.5
         x_embed = grid.cumsum(axis=1) - 0.5
