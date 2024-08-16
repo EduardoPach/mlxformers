@@ -66,6 +66,9 @@ class ConvTranspose2d(nn.Module):
         super().__init__()
 
         kernel_size, stride, padding = [(x, x) if isinstance(x, int) else x for x in (kernel_size, stride, padding)]
+        # Add +1 to padding to match the behavior of PyTorch
+        padding = (padding[0] + 1, padding[1] + 1)
+
         scale = math.sqrt(1 / (in_channels * kernel_size[0] * kernel_size[1]))
         self.weight = mx.random.uniform(
             low=-scale,
