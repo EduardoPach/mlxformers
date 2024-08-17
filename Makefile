@@ -19,4 +19,7 @@ lint-fix:
 style:
 	$(PYTHON) ruff format $(SRC_DIR) $(TEST_DIR)
 
-.PHONY: install lint fix
+publish:
+	@pdm publish -u $(PYPI_USERNAME) -P $(PYPI_PASSWORD)
+
+.PHONY: install lint fix publish
