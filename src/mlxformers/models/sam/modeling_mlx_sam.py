@@ -1425,6 +1425,7 @@ class MlxSamModel(MlxSamPreTrainedModel):
             mask_decoder_attentions=mask_decoder_attentions,
         )
 
+    # NOTE: Doing this just to avoid dealing with XxxImageProcessor, XxxProcessor, etc from `transformers` library
     @staticmethod
     def post_process_masks(
         masks: mx.array,
