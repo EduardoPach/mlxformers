@@ -4,11 +4,12 @@ from typing import Any, Dict
 import numpy as np
 import requests
 import torch
-from mlxformers.models.sam.modeling_mlx_sam import MlxSamModel
 from PIL import Image
 from transformers import SamModel, SamProcessor
 from transformers.tokenization_utils import BatchEncoding
 from transformers.utils import cached_property
+
+from mlxformers.models.sam.modeling_mlx_sam import MlxSamModel
 
 
 class MlxSamModelIntegrationTest(unittest.TestCase):
