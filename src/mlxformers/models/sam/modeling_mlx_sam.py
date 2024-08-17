@@ -1429,7 +1429,7 @@ class MlxSamModel(MlxSamPreTrainedModel):
     # NOTE: Doing this just to avoid dealing with XxxImageProcessor, XxxProcessor, etc from `transformers` library
     @staticmethod
     def post_process_masks(
-        masks: mx.array,
+        masks: mx.array | List[mx.array | np.ndarray],
         original_sizes: mx.array | List[Tuple[int, ...]],
         reshaped_input_sizes: mx.array | List[Tuple[int, ...]],
         pad_size: Dict[str, int],
@@ -1439,8 +1439,8 @@ class MlxSamModel(MlxSamPreTrainedModel):
         """Post-process the masks to the original image size.
 
         Args:
-            masks (`mx.array`):
-                A list of length `batch_size` containing the predicted masks.
+            masks (`mx.array | List[mx.array | np.ndarray]`):
+                The masks to post-process.
             original_sizes (`mx.array | List[Tuple[int, ...]]`):
                 The original image sizes.
             reshaped_input_sizes (`mx.array | List[Tuple[int, ...]]`):
@@ -1457,6 +1457,9 @@ class MlxSamModel(MlxSamPreTrainedModel):
             List[mx.array]:
                 The post-processed masks.
         """
+        if not isinstance(masks, list) and not isinstance(masks[0], (np.ndarray, mx.array)):
+            raise ValueError("Input masks should be a list of `mx.array` or a list of `np.ndarray`")
+
         target_image_size = (pad_size["height"], pad_size["width"])
 
         if isinstance(original_sizes, (mx.array, np.ndarray)):
@@ -1470,18 +1473,17 @@ class MlxSamModel(MlxSamPreTrainedModel):
             return (shape1[0] / shape2[0], shape1[1] / shape2[1])
 
         for i, original_size in enumerate(original_sizes):
-            if isinstance(masks[i], np.ndarray):
-                masks[i] = mx.array(masks[i])
-            elif not isinstance(masks[i], mx.array):
-                raise ValueError("Input masks should be a list of `mx.array` or a list of `np.ndarray`")
+            mask = masks[i]
+            if isinstance(mask, np.ndarray):
+                mask = mx.array(mask)
 
-            mask_shape = masks[i].shape[-2:]
+            mask_shape = mask.shape[-2:]
             # Move channels to last
-            masks[i] = masks[i].moveaxis(-3, -1)
+            mask = mask.moveaxis(-3, -1)
 
             scale_factor = compute_scale(target_image_size, mask_shape)
 
-            interpolated_mask = nn.Upsample(scale_factor=scale_factor, mode="linear", align_corners=False)(masks[i])
+            interpolated_mask = nn.Upsample(scale_factor=scale_factor, mode="linear", align_corners=False)(mask)
             interpolated_mask = interpolated_mask[:, : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1], :]
 
             scale_factor = compute_scale(original_size, reshaped_input_sizes[i])

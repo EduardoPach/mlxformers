@@ -70,7 +70,7 @@ class MlxSamModelIntegrationTest(unittest.TestCase):
         )
 
         mlx_postprocessed_masks = mlx_model.post_process_masks(
-            masks=list(mlx_pred_masks),
+            masks=mlx_pred_masks,
             original_sizes=mlx_inputs.original_sizes,
             reshaped_input_sizes=mlx_inputs.reshaped_input_sizes,
             pad_size=processor.image_processor.pad_size,
