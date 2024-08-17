@@ -62,22 +62,18 @@ class MlxSamModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(pt_pred_masks, mlx_pred_masks, atol=1e-3))
 
         # Assert Postprocess masks
-        original_size = [(data["images"].height, data["images"].width)]
-        reshaped_input_sizes = [(mlx_inputs["pixel_values"].shape[2], mlx_inputs["pixel_values"].shape[3])]
-        pad_size = processor.image_processor.pad_size
-
         pt_postprocessed_masks = processor.post_process_masks(
             masks=list(pt_pred_masks),
-            original_sizes=original_size,
-            reshaped_input_sizes=reshaped_input_sizes,
+            original_sizes=pt_inputs.original_sizes,
+            reshaped_input_sizes=pt_inputs.reshaped_input_sizes,
             binarize=False,
         )
 
         mlx_postprocessed_masks = mlx_model.post_process_masks(
             masks=list(mlx_pred_masks),
-            original_sizes=original_size,
-            reshaped_input_sizes=reshaped_input_sizes,
-            pad_size=pad_size,
+            original_sizes=mlx_inputs.original_sizes,
+            reshaped_input_sizes=mlx_inputs.reshaped_input_sizes,
+            pad_size=processor.image_processor.pad_size,
             binarize=False,
         )
 

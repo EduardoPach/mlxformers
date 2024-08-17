@@ -1432,18 +1432,38 @@ class MlxSamModel(MlxSamPreTrainedModel):
         masks: mx.array,
         original_sizes: mx.array | List[Tuple[int, ...]],
         reshaped_input_sizes: mx.array | List[Tuple[int, ...]],
+        pad_size: Dict[str, int],
         mask_threshold: float = 0.0,
         binarize: bool = True,
-        pad_size: Dict[str, int] | None = None,
     ) -> List[mx.array]:
-        target_image_size = (
-            (pad_size["height"], pad_size["width"]) if pad_size is not None else reshaped_input_sizes[0]
-        )
+        """Post-process the masks to the original image size.
+
+        Args:
+            masks (`mx.array`):
+                A list of length `batch_size` containing the predicted masks.
+            original_sizes (`mx.array | List[Tuple[int, ...]]`):
+                The original image sizes.
+            reshaped_input_sizes (`mx.array | List[Tuple[int, ...]]`):
+                The reshaped input sizes.
+            pad_size (`Dict[str, int]`):
+                The padding size with keys `height` and `width`. One can get this
+                from the `SamImageProcessor` object.
+            mask_threshold (`float`, optional):
+                The threshold to binarize the masks. Defaults to 0.0.
+            binarize (`bool`, optional):
+                Whether to binarize the masks or not. Defaults to True.
+
+        Returns:
+            List[mx.array]:
+                The post-processed masks.
+        """
+        target_image_size = (pad_size["height"], pad_size["width"])
 
         if isinstance(original_sizes, (mx.array, np.ndarray)):
             original_sizes = original_sizes.tolist()
         if isinstance(reshaped_input_sizes, (mx.array, np.ndarray)):
             reshaped_input_sizes = reshaped_input_sizes.tolist()
+
         output_masks = []
 
         def compute_scale(shape1, shape2):
@@ -1453,7 +1473,7 @@ class MlxSamModel(MlxSamPreTrainedModel):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = mx.array(masks[i])
             elif not isinstance(masks[i], mx.array):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise ValueError("Input masks should be a list of `mx.array` or a list of `np.ndarray`")
 
             mask_shape = masks[i].shape[-2:]
             # Move channels to last
@@ -1462,7 +1482,7 @@ class MlxSamModel(MlxSamPreTrainedModel):
             scale_factor = compute_scale(target_image_size, mask_shape)
 
             interpolated_mask = nn.Upsample(scale_factor=scale_factor, mode="linear", align_corners=False)(masks[i])
-            interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
+            interpolated_mask = interpolated_mask[:, : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1], :]
 
             scale_factor = compute_scale(original_size, reshaped_input_sizes[i])
 
