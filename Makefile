@@ -2,6 +2,7 @@
 PYTHON := $(shell which pdm > /dev/null 2>&1 && echo "pdm run" || echo "python -m")
 SRC_DIR := src/mlxformers
 TEST_DIR := tests
+TEST_MODEL_DIR := tests/models
 
 install:
 	if command -v pdm >/dev/null 2>&1; then \
@@ -21,5 +22,8 @@ style:
 
 publish:
 	@pdm publish -u $(PYPI_USERNAME) -P $(PYPI_PASSWORD)
+
+test:
+	pytest -vv $(TEST_MODEL_DIR)
 
 .PHONY: install lint fix publish
