@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The Meta AI Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2024 The Meta AI Authors and Eduardo Pacheco. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch SAM model."""
+"""MLX SAM model."""
 
 import collections
 import math
@@ -22,9 +22,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import mlx.core as mx
 import numpy as np
 from mlx import nn
-from mlxformers.modeling_mlx_utils import ACT2FN, ConvTranspose2d, MlxPreTrainedModel
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+
+from mlxformers.modeling_mlx_utils import ACT2FN, ConvTranspose2d, MlxPreTrainedModel
 
 
 logger = logging.get_logger(__name__)
