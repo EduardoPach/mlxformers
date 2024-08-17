@@ -1424,3 +1424,55 @@ class MlxSamModel(MlxSamPreTrainedModel):
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
+
+    @staticmethod
+    def post_process_masks(
+        masks: mx.array,
+        original_sizes: mx.array | List[Tuple[int, ...]],
+        reshaped_input_sizes: mx.array | List[Tuple[int, ...]],
+        mask_threshold: float = 0.0,
+        binarize: bool = True,
+        pad_size: Dict[str, int] | None = None,
+    ) -> List[mx.array]:
+        target_image_size = (
+            (pad_size["height"], pad_size["width"]) if pad_size is not None else reshaped_input_sizes[0]
+        )
+
+        if isinstance(original_sizes, (mx.array, np.ndarray)):
+            original_sizes = original_sizes.tolist()
+        if isinstance(reshaped_input_sizes, (mx.array, np.ndarray)):
+            reshaped_input_sizes = reshaped_input_sizes.tolist()
+        output_masks = []
+
+        def compute_scale(shape1, shape2):
+            return (shape1[0] / shape2[0], shape1[1] / shape2[1])
+
+        for i, original_size in enumerate(original_sizes):
+            if isinstance(masks[i], np.ndarray):
+                masks[i] = mx.array(masks[i])
+            elif not isinstance(masks[i], mx.array):
+                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+
+            mask_shape = masks[i].shape[-2:]
+            # Move channels to last
+            masks[i] = masks[i].moveaxis(-3, -1)
+
+            scale_factor = compute_scale(target_image_size, mask_shape)
+
+            interpolated_mask = nn.Upsample(scale_factor=scale_factor, mode="linear", align_corners=False)(masks[i])
+            interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
+
+            scale_factor = compute_scale(original_size, reshaped_input_sizes[i])
+
+            interpolated_mask = nn.Upsample(scale_factor=scale_factor, mode="linear", align_corners=False)(
+                interpolated_mask
+            )
+
+            if binarize:
+                interpolated_mask = interpolated_mask > mask_threshold
+
+            # Move channels back to first
+            interpolated_mask = interpolated_mask.moveaxis(-1, -3)
+            output_masks.append(interpolated_mask)
+
+        return output_masks
