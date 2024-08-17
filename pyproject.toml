@@ -29,6 +29,7 @@ dev = [
     "pre-commit>=3.5.0",
     "pillow>=10.4.0",
     "torch>=2.4.0",
+    "pytest>=8.3.2",
 ]
 
 # COPYING FROM transformers to keep the same style

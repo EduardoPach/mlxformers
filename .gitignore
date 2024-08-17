@@ -9,6 +9,9 @@ __pycache__/
 # Lock files
 *.lock
 
+# vscode
+.vscode/
+
 # Distribution / packaging
 .Python
 build/
